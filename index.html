@@ -9,17 +9,32 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:#020817;font-family:'Segoe UI',system-ui,sans-serif;color:#f1f5f9;min-height:100vh}
+  html{height:auto;overflow-y:scroll}
+  body{background:#020817;font-family:'Segoe UI',system-ui,sans-serif;color:#f1f5f9;height:auto;overflow-y:visible}
   button{font-family:inherit;cursor:pointer}
   input,textarea{font-family:inherit}
   textarea:focus,input:focus{outline:none}
   ::-webkit-scrollbar{width:6px}
   ::-webkit-scrollbar-track{background:#0f172a}
   ::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}
+  #root{min-height:100%;padding-bottom:40px}
 </style>
 </head>
 <body>
 <div id="root"></div>
+
+<script>
+  // Auto-resize: tells Google Sites iframe how tall the content is
+  function sendHeight() {
+    const h = document.body.scrollHeight;
+    window.parent.postMessage({ type: 'setHeight', height: h }, '*');
+  }
+  // Send on load and whenever content changes
+  window.addEventListener('load', sendHeight);
+  const observer = new MutationObserver(sendHeight);
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+  setInterval(sendHeight, 800);
+</script>
 
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
@@ -514,7 +529,7 @@ function EduQuest() {
       <Toast msg={toast.msg} show={toast.show} />
 
       {/* HEADER */}
-      <div style={{position:"sticky",top:0,zIndex:50,background:"rgba(2,8,23,0.88)",backdropFilter:"blur(16px)",borderBottom:"1px solid #1e293b",padding:"11px 18px"}}>
+      <div style={{position:"relative",top:0,zIndex:50,background:"rgba(2,8,23,0.97)",borderBottom:"1px solid #1e293b",padding:"11px 18px"}}>
         <div style={{maxWidth:680,margin:"0 auto"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
