@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EduQuest – Gamified Homeschooling</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#020817;font-family:'Segoe UI',system-ui,sans-serif;color:#f1f5f9;min-height:100vh}
+  button{font-family:inherit;cursor:pointer}
+  input,textarea{font-family:inherit}
+  textarea:focus,input:focus{outline:none}
+  ::-webkit-scrollbar{width:6px}
+  ::-webkit-scrollbar-track{background:#0f172a}
+  ::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ── DATA ────────────────────────────────────────────────────────────────────
+
+const SUBJECTS = {
+  math:  { icon:"⚡", label:"Math Arena",  color:"#f59e0b", bg:"#78350f" },
+  flash: { icon:"🃏", label:"Card Battle", color:"#8b5cf6", bg:"#4c1d95" },
+  notes: { icon:"🌍", label:"World Build", color:"#10b981", bg:"#064e3b" },
+  quiz:  { icon:"🏰", label:"Boss Fight",  color:"#ef4444", bg:"#7f1d1d" },
+};
+
+const FLASHCARDS = [
+  { id:1, front:"What is the powerhouse of the cell?",           back:"Mitochondria",                                      subject:"Biology",    atk:85, def:60, rarity:"rare"   },
+  { id:2, front:"What is H₂O?",                                  back:"Water (two hydrogen, one oxygen)",                   subject:"Chemistry",  atk:70, def:75, rarity:"common" },
+  { id:3, front:"Who wrote Romeo and Juliet?",                   back:"William Shakespeare",                                subject:"Literature", atk:65, def:80, rarity:"common" },
+  { id:4, front:"What is the formula for area of a circle?",     back:"π × r²",                                            subject:"Math",       atk:90, def:55, rarity:"epic"   },
+  { id:5, front:"What year did World War II end?",               back:"1945",                                               subject:"History",    atk:75, def:70, rarity:"rare"   },
+  { id:6, front:"What is photosynthesis?",                       back:"Converting sunlight + CO₂ + water into glucose + oxygen", subject:"Biology", atk:95, def:65, rarity:"epic" },
+];
+
+const MATH_PROBLEMS = [
+  { q:"14 × 6 = ?",    a:84,    choices:[74,84,94,86]            },
+  { q:"256 ÷ 8 = ?",   a:32,    choices:[28,32,36,24]            },
+  { q:"√144 = ?",      a:12,    choices:[11,12,13,14]            },
+  { q:"7³ = ?",        a:343,   choices:[343,333,349,353]        },
+  { q:"15% of 200 = ?",a:30,    choices:[20,25,30,35]            },
+  { q:"3/4 + 1/2 = ?", a:"5/4", choices:["4/6","5/4","1","6/8"] },
+];
+
+const QUIZ_QUESTIONS = [
+  { q:"Which planet is closest to the Sun?",             choices:["Venus","Mercury","Mars","Earth"],                  a:"Mercury",        xp:40 },
+  { q:"What is 25% of 400?",                             choices:["75","100","125","150"],                            a:"100",            xp:50 },
+  { q:"How many continents are on Earth?",               choices:["5","6","7","8"],                                   a:"7",              xp:30 },
+  { q:"What gas do plants absorb for photosynthesis?",   choices:["Oxygen","Nitrogen","Carbon Dioxide","Hydrogen"],   a:"Carbon Dioxide", xp:45 },
+  { q:"Who painted the Mona Lisa?",                      choices:["Michelangelo","Da Vinci","Raphael","Picasso"],     a:"Da Vinci",       xp:35 },
+];
+
+const RARITIES = { common:"#9ca3af", rare:"#3b82f6", epic:"#8b5cf6", legendary:"#f59e0b" };
+
+const NOTE_TOPICS = [
+  { title:"The Solar System", content:"Our solar system contains 8 planets orbiting the Sun. The inner planets (Mercury, Venus, Earth, Mars) are rocky. The outer planets (Jupiter, Saturn, Uranus, Neptune) are gas giants.", keywords:["planets","orbit","rocky","gas giants","Sun"] },
+];
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+
+function XPBar({ xp, level }) {
+  const xpNeeded = level * 200;
+  const pct = Math.min((xp / xpNeeded) * 100, 100);
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:8}}>
+      <span style={{fontSize:12,color:"#f59e0b",fontWeight:700,minWidth:58}}>LVL {level}</span>
+      <div style={{flex:1,height:8,background:"#1e293b",borderRadius:4,overflow:"hidden"}}>
+        <div style={{width:`${pct}%`,height:"100%",background:"linear-gradient(90deg,#f59e0b,#ef4444)",borderRadius:4,transition:"width 0.6s ease"}} />
+      </div>
+      <span style={{fontSize:11,color:"#94a3b8",minWidth:72}}>{xp}/{xpNeeded} XP</span>
+    </div>
+  );
+}
+
+function Toast({ msg, show }) {
+  return (
+    <div style={{
+      position:"fixed",top:80,right:20,zIndex:9999,
+      background:"linear-gradient(135deg,#f59e0b,#ef4444)",
+      color:"#fff",padding:"12px 20px",borderRadius:12,
+      fontWeight:700,fontSize:14,boxShadow:"0 8px 32px rgba(0,0,0,0.5)",
+      transform: show ? "translateY(0)" : "translateY(-120px)",
+      opacity: show ? 1 : 0,
+      transition:"all 0.4s cubic-bezier(0.34,1.56,0.64,1)",
+      pointerEvents:"none"
+    }}>{msg}</div>
+  );
+}
+
+// ── MATH ARENA ───────────────────────────────────────────────────────────────
+
+function MathArena({ onXP, onClose }) {
+  const [idx,      setIdx]      = useState(0);
+  const [score,    setScore]    = useState(0);
+  const [streak,   setStreak]   = useState(0);
+  const [feedback, setFeedback] = useState(null);
+  const [done,     setDone]     = useState(false);
+  const [timeLeft, setTimeLeft] = useState(15);
+  const timerRef = useRef();
+  const prob = MATH_PROBLEMS[idx];
+
+  useEffect(() => {
+    if (done) return;
+    setTimeLeft(15);
+    timerRef.current = setInterval(() => {
+      setTimeLeft(t => {
+        if (t <= 1) { clearInterval(timerRef.current); handleAnswer(null); return 0; }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timerRef.current);
+  }, [idx, done]);
+
+  const handleAnswer = (choice) => {
+    clearInterval(timerRef.current);
+    const correct = (choice == prob.a);
+    if (correct) {
+      const pts = 10 + streak * 5;
+      setScore(s => s + pts);
+      setStreak(s => s + 1);
+      setFeedback({ ok:true,  msg:`+${pts} XP${streak>0?` 🔥 ${streak+1}x Combo!`:""}` });
+    } else {
+      setStreak(0);
+      setFeedback({ ok:false, msg: choice===null ? "⏱️ Time's up!" : "❌ Wrong! Keep going!" });
+    }
+    setTimeout(() => {
+      setFeedback(null);
+      if (idx < MATH_PROBLEMS.length - 1) setIdx(i => i + 1);
+      else { setDone(true); onXP(score + (correct?10:0)); }
+    }, 900);
+  };
+
+  const urgentColor = timeLeft<=5?"#ef4444":timeLeft<=10?"#f59e0b":"#10b981";
+
+  if (done) return (
+    <div style={{textAlign:"center",padding:32}}>
+      <div style={{fontSize:60,marginBottom:12}}>🏆</div>
+      <div style={{fontSize:26,fontWeight:900,color:"#f59e0b",marginBottom:8}}>Math Arena Complete!</div>
+      <div style={{fontSize:16,color:"#94a3b8",marginBottom:24}}>You earned <span style={{color:"#f59e0b",fontWeight:700}}>{score} XP</span></div>
+      <div style={{display:"flex",gap:16,justifyContent:"center",marginBottom:24}}>
+        <div style={{background:"#1e293b",borderRadius:12,padding:"14px 22px",textAlign:"center"}}>
+          <div style={{fontSize:22,fontWeight:900,color:"#f59e0b"}}>{score}</div>
+          <div style={{fontSize:11,color:"#64748b"}}>TOTAL XP</div>
+        </div>
+        <div style={{background:"#1e293b",borderRadius:12,padding:"14px 22px",textAlign:"center"}}>
+          <div style={{fontSize:22,fontWeight:900,color:"#ef4444"}}>{streak}🔥</div>
+          <div style={{fontSize:11,color:"#64748b"}}>BEST STREAK</div>
+        </div>
+      </div>
+      <button onClick={onClose} style={{background:"linear-gradient(135deg,#f59e0b,#ef4444)",border:"none",color:"#fff",padding:"12px 28px",borderRadius:10,fontWeight:800,fontSize:15}}>Return to Hub</button>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <div style={{fontSize:12,color:"#64748b"}}>Question {idx+1}/{MATH_PROBLEMS.length}</div>
+        <div style={{fontSize:12,color:"#64748b"}}>Score: <span style={{color:"#f59e0b",fontWeight:700}}>{score} XP</span></div>
+        <div style={{fontSize:14,fontWeight:800,color:urgentColor,background:"#0f172a",borderRadius:20,padding:"4px 14px",border:`2px solid ${urgentColor}`,transition:"all 0.3s"}}>⏱ {timeLeft}s</div>
+      </div>
+      <div style={{height:4,background:"#1e293b",borderRadius:4,marginBottom:20,overflow:"hidden"}}>
+        <div style={{width:`${(idx/MATH_PROBLEMS.length)*100}%`,height:"100%",background:"#f59e0b",transition:"width 0.4s"}} />
+      </div>
+      {streak>0 && <div style={{textAlign:"center",marginBottom:14}}><span style={{background:"#7f1d1d",color:"#ef4444",padding:"4px 14px",borderRadius:20,fontSize:12,fontWeight:700}}>🔥 {streak}x Combo Streak!</span></div>}
+      <div style={{background:"linear-gradient(135deg,#1e293b,#0f172a)",border:"2px solid #f59e0b",borderRadius:18,padding:28,textAlign:"center",marginBottom:20,boxShadow:"0 0 30px rgba(245,158,11,0.15)"}}>
+        <div style={{fontSize:28,fontWeight:900,color:"#f1f5f9",fontFamily:"'Courier New',monospace"}}>{prob.q}</div>
+      </div>
+      {feedback && <div style={{textAlign:"center",padding:10,marginBottom:14,borderRadius:10,background:feedback.ok?"#064e3b":"#7f1d1d",color:feedback.ok?"#10b981":"#ef4444",fontWeight:700,fontSize:14}}>{feedback.msg}</div>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        {prob.choices.map((c,i) => (
+          <button key={i} onClick={()=>handleAnswer(c)}
+            style={{background:"#1e293b",border:"2px solid #334155",borderRadius:12,color:"#f1f5f9",padding:"14px",fontSize:17,fontWeight:700,transition:"all 0.2s",fontFamily:"'Courier New',monospace"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="#f59e0b";e.currentTarget.style.background="#292524"}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="#334155";e.currentTarget.style.background="#1e293b"}}
+          >{c}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── CARD BATTLE ───────────────────────────────────────────────────────────────
+
+function CardBattle({ onXP, onClose }) {
+  const [phase,    setPhase]    = useState("select");
+  const [selected, setSelected] = useState(null);
+  const [flipped,  setFlipped]  = useState(false);
+  const [answer,   setAnswer]   = useState("");
+  const [playerHP, setPlayerHP] = useState(100);
+  const [enemyHP,  setEnemyHP]  = useState(100);
+  const [round,    setRound]    = useState(1);
+  const [log,      setLog]      = useState([]);
+  const [battleDone, setBattleDone] = useState(false);
+
+  const card = selected;
+
+  const selectCard = (c) => { setSelected(c); setPhase("reveal"); setFlipped(false); };
+
+  const checkAnswer = () => {
+    const correct = answer.trim().toLowerCase().includes(card.back.toLowerCase().slice(0,8).toLowerCase());
+    const dmg     = correct ? card.atk : 0;
+    const enemyDmg = Math.floor(Math.random()*30)+10;
+    const newEHP  = Math.max(0, enemyHP - dmg);
+    const newPHP  = Math.max(0, playerHP - (correct?5:enemyDmg));
+    setEnemyHP(newEHP);
+    setPlayerHP(newPHP);
+    setLog(l => [...l, correct
+      ? `⚔️ Round ${round}: You dealt ${dmg} damage! Enemy: ${newEHP}HP`
+      : `🛡️ Round ${round}: Wrong! Enemy attacks for ${enemyDmg}! You: ${newPHP}HP`
+    ]);
+    setAnswer("");
+    if (newEHP<=0||newPHP<=0||round>=5) {
+      setBattleDone(true);
+      onXP(newEHP<=0||newEHP<newPHP?80:20);
+    } else {
+      setRound(r=>r+1);
+      setSelected(FLASHCARDS[Math.floor(Math.random()*FLASHCARDS.length)]);
+      setFlipped(false);
+    }
+  };
+
+  const rarityColor = card ? RARITIES[card.rarity] : "#fff";
+
+  if (battleDone) return (
+    <div style={{textAlign:"center",padding:32}}>
+      <div style={{fontSize:60,marginBottom:12}}>{enemyHP<=0?"🏆":playerHP<=0?"💀":"⚔️"}</div>
+      <div style={{fontSize:22,fontWeight:900,color:"#f59e0b",marginBottom:8}}>
+        {enemyHP<=0?"Victory!":playerHP<=0?"Defeated...":"Battle Over!"}
+      </div>
+      <div style={{background:"#1e293b",borderRadius:12,padding:14,marginBottom:20,textAlign:"left"}}>
+        {log.map((l,i)=><div key={i} style={{color:"#94a3b8",fontSize:12,marginBottom:4}}>{l}</div>)}
+      </div>
+      <button onClick={onClose} style={{background:"linear-gradient(135deg,#8b5cf6,#ec4899)",border:"none",color:"#fff",padding:"12px 28px",borderRadius:10,fontWeight:800,fontSize:15}}>Return to Hub</button>
+    </div>
+  );
+
+  if (phase==="select") return (
+    <div>
+      <div style={{fontSize:16,fontWeight:700,color:"#f1f5f9",marginBottom:6}}>Choose your Card</div>
+      <div style={{fontSize:12,color:"#64748b",marginBottom:18}}>Select a flashcard to battle with. Study it, then fight!</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+        {FLASHCARDS.map(c=>(
+          <div key={c.id} onClick={()=>selectCard(c)} style={{background:"#1e293b",border:`2px solid ${RARITIES[c.rarity]}`,borderRadius:14,padding:12,cursor:"pointer",transition:"transform 0.2s",boxShadow:`0 0 10px ${RARITIES[c.rarity]}33`}}
+            onMouseEnter={e=>e.currentTarget.style.transform="scale(1.05)"}
+            onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}
+          >
+            <div style={{fontSize:10,color:RARITIES[c.rarity],fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{c.rarity}</div>
+            <div style={{fontSize:11,color:"#f1f5f9",fontWeight:600,marginBottom:8,lineHeight:1.4}}>{c.front.slice(0,30)}…</div>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <span style={{fontSize:11,color:"#ef4444"}}>⚔️{c.atk}</span>
+              <span style={{fontSize:11,color:"#3b82f6"}}>🛡️{c.def}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:18}}>
+        {[["🧙 You",playerHP,"#10b981"],["👹 Enemy",enemyHP,"#ef4444"]].map(([label,hp,color])=>(
+          <div key={label}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+              <span style={{fontSize:12,fontWeight:700,color}}>{label}</span>
+              <span style={{fontSize:11,color:"#94a3b8"}}>{hp}/100 HP</span>
+            </div>
+            <div style={{height:10,background:"#1e293b",borderRadius:5,overflow:"hidden"}}>
+              <div style={{width:`${hp}%`,height:"100%",background:color,transition:"width 0.5s"}} />
+            </div>
+          </div>
+        ))}
+      </div>
+      {card && (
+        <div onClick={()=>setFlipped(f=>!f)} style={{background:flipped?"linear-gradient(135deg,#1e293b,#0f172a)":`linear-gradient(135deg,${rarityColor}22,#0f172a)`,border:`2px solid ${rarityColor}`,borderRadius:16,padding:22,cursor:"pointer",boxShadow:`0 0 20px ${rarityColor}44`,transition:"background 0.4s",marginBottom:18}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+            <span style={{fontSize:11,color:rarityColor,fontWeight:700,textTransform:"uppercase"}}>{card.rarity} • {card.subject}</span>
+            <span style={{fontSize:11,color:"#64748b"}}>Tap to {flipped?"hide":"reveal"}</span>
+          </div>
+          <div style={{fontSize:15,fontWeight:700,color:"#f1f5f9",marginBottom:flipped?10:0}}>{card.front}</div>
+          {flipped && <div style={{fontSize:13,color:"#94a3b8",borderTop:"1px solid #334155",paddingTop:10,marginTop:4}}>{card.back}</div>}
+          <div style={{display:"flex",gap:14,marginTop:10}}>
+            <span style={{fontSize:12,color:"#ef4444",fontWeight:700}}>⚔️ ATK {card.atk}</span>
+            <span style={{fontSize:12,color:"#3b82f6",fontWeight:700}}>🛡️ DEF {card.def}</span>
+          </div>
+        </div>
+      )}
+      <div style={{fontSize:12,color:"#64748b",marginBottom:8}}>Round {round}/5 — Answer to attack:</div>
+      <input value={answer} onChange={e=>setAnswer(e.target.value)} onKeyDown={e=>e.key==="Enter"&&answer&&checkAnswer()} placeholder="Type your answer…"
+        style={{width:"100%",background:"#1e293b",border:"2px solid #334155",borderRadius:10,padding:"11px 14px",color:"#f1f5f9",fontSize:14,marginBottom:10}} />
+      <button onClick={checkAnswer} disabled={!answer} style={{width:"100%",background:answer?"linear-gradient(135deg,#8b5cf6,#ec4899)":"#334155",border:"none",borderRadius:10,color:"#fff",padding:"12px",fontWeight:800,fontSize:14,cursor:answer?"pointer":"not-allowed"}}>⚔️ ATTACK!</button>
+      {log.length>0 && <div style={{marginTop:10,fontSize:12,color:"#94a3b8"}}>{log[log.length-1]}</div>}
+    </div>
+  );
+}
+
+// ── WORLD BUILD (NOTES) ──────────────────────────────────────────────────────
+
+function WorldBuild({ onXP, onClose }) {
+  const [notes,     setNotes]     = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [crystals,  setCrystals]  = useState(0);
+  const [xpEarned,  setXpEarned]  = useState(0);
+  const topic = NOTE_TOPICS[0];
+
+  const evaluate = () => {
+    const lower = notes.toLowerCase();
+    const found = topic.keywords.filter(k=>lower.includes(k.toLowerCase()));
+    const pct   = found.length / topic.keywords.length;
+    const xp    = Math.round(pct * 100);
+    const crys  = found.length * 5;
+    setCrystals(crys);
+    setXpEarned(xp);
+    setSubmitted(true);
+    onXP(xp);
+  };
+
+  if (submitted) return (
+    <div style={{textAlign:"center",padding:28}}>
+      <div style={{fontSize:56,marginBottom:10}}>🌍</div>
+      <div style={{fontSize:20,fontWeight:900,color:"#10b981",marginBottom:8}}>Notes Submitted!</div>
+      <div style={{display:"flex",gap:14,justifyContent:"center",marginBottom:20}}>
+        <div style={{background:"#1e293b",borderRadius:12,padding:"14px 20px"}}>
+          <div style={{fontSize:24,fontWeight:900,color:"#10b981"}}>{xpEarned}</div>
+          <div style={{fontSize:11,color:"#64748b"}}>XP EARNED</div>
+        </div>
+        <div style={{background:"#1e293b",borderRadius:12,padding:"14px 20px"}}>
+          <div style={{fontSize:24,fontWeight:900,color:"#f59e0b"}}>{crystals} 💎</div>
+          <div style={{fontSize:11,color:"#64748b"}}>CRYSTALS</div>
+        </div>
+      </div>
+      <div style={{background:"#064e3b",border:"1px solid #10b981",borderRadius:12,padding:14,marginBottom:20,textAlign:"left"}}>
+        <div style={{fontSize:12,color:"#10b981",fontWeight:700,marginBottom:8}}>Keywords detected:</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+          {topic.keywords.map(k=>(
+            <span key={k} style={{padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:600,background:notes.toLowerCase().includes(k.toLowerCase())?"#10b981":"#334155",color:notes.toLowerCase().includes(k.toLowerCase())?"#fff":"#64748b"}}>{k}</span>
+          ))}
+        </div>
+      </div>
+      <button onClick={onClose} style={{background:"linear-gradient(135deg,#10b981,#3b82f6)",border:"none",color:"#fff",padding:"12px 28px",borderRadius:10,fontWeight:800,fontSize:15}}>Return to Hub</button>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{background:"linear-gradient(135deg,#064e3b,#0f172a)",border:"1px solid #10b981",borderRadius:14,padding:18,marginBottom:18}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#10b981",marginBottom:8}}>📖 {topic.title}</div>
+        <div style={{fontSize:13,color:"#94a3b8",lineHeight:1.7}}>{topic.content}</div>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <div style={{fontSize:13,color:"#f1f5f9",fontWeight:600}}>✍️ Write your notes:</div>
+        <div style={{fontSize:12,color:"#64748b"}}>Words: {notes.split(/\s+/).filter(Boolean).length}</div>
+      </div>
+      <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Write your notes here… Include key facts. The AI checks your comprehension!"
+        style={{width:"100%",height:150,background:"#1e293b",border:"2px solid #334155",borderRadius:12,padding:14,color:"#f1f5f9",fontSize:14,lineHeight:1.6,resize:"none",marginBottom:14}} />
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
+        {topic.keywords.map(k=>(
+          <span key={k} style={{background:"#1e293b",border:"1px solid #334155",color:"#64748b",padding:"3px 10px",borderRadius:20,fontSize:11}}>💡 {k}</span>
+        ))}
+      </div>
+      <button onClick={evaluate} disabled={notes.length<20} style={{width:"100%",background:notes.length>=20?"linear-gradient(135deg,#10b981,#3b82f6)":"#334155",border:"none",borderRadius:10,color:"#fff",padding:"13px",fontWeight:800,fontSize:14,cursor:notes.length>=20?"pointer":"not-allowed"}}>🔮 Submit & Earn Crystals</button>
+    </div>
+  );
+}
+
+// ── BOSS FIGHT (QUIZ) ────────────────────────────────────────────────────────
+
+function BossFight({ onXP, onClose }) {
+  const [qi,       setQi]       = useState(0);
+  const [bossHP,   setBossHP]   = useState(200);
+  const [playerHP, setPlayerHP] = useState(150);
+  const [feedback, setFeedback] = useState(null);
+  const [done,     setDone]     = useState(false);
+  const [totalXP,  setTotalXP]  = useState(0);
+  const [shake,    setShake]    = useState(false);
+  const q = QUIZ_QUESTIONS[qi];
+
+  const answer = (choice) => {
+    const correct  = choice === q.a;
+    const dmg      = correct ? 40+Math.floor(Math.random()*20) : 0;
+    const bDmg     = correct ? 0 : 25+Math.floor(Math.random()*15);
+    const newBHP   = Math.max(0, bossHP-dmg);
+    const newPHP   = Math.max(0, playerHP-bDmg);
+    if (correct) { setShake(true); setTimeout(()=>setShake(false),400); }
+    setBossHP(newBHP);
+    setPlayerHP(newPHP);
+    setFeedback({correct,dmg,bDmg});
+    setTotalXP(x=>x+(correct?q.xp:0));
+    setTimeout(()=>{
+      setFeedback(null);
+      if (newBHP<=0||newPHP<=0||qi>=QUIZ_QUESTIONS.length-1) {
+        setDone(true); onXP(totalXP+(correct?q.xp:0));
+      } else setQi(i=>i+1);
+    },1100);
+  };
+
+  if (done) {
+    const won = bossHP<=0||bossHP<playerHP;
+    return (
+      <div style={{textAlign:"center",padding:32}}>
+        <div style={{fontSize:60,marginBottom:12}}>{won?"🏆":"💀"}</div>
+        <div style={{fontSize:24,fontWeight:900,color:won?"#f59e0b":"#ef4444",marginBottom:8}}>{won?"Boss Defeated!":"You fell in battle…"}</div>
+        <div style={{fontSize:14,color:"#94a3b8",marginBottom:22}}>You earned <span style={{color:"#f59e0b",fontWeight:700}}>{totalXP} XP</span></div>
+        <button onClick={onClose} style={{background:"linear-gradient(135deg,#ef4444,#f59e0b)",border:"none",color:"#fff",padding:"12px 28px",borderRadius:10,fontWeight:800,fontSize:15}}>Return to Hub</button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{background:"linear-gradient(135deg,#1a0000,#0f172a)",border:"2px solid #ef4444",borderRadius:18,padding:18,marginBottom:18,textAlign:"center",transform:shake?"translateX(-4px)":"translateX(0)",transition:"transform 0.1s",boxShadow:"0 0 24px rgba(239,68,68,0.2)"}}>
+        <div style={{fontSize:44,marginBottom:6}}>👹</div>
+        <div style={{fontSize:13,fontWeight:700,color:"#ef4444",marginBottom:8}}>MATH DRAGON</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:10,color:"#ef4444",minWidth:50}}>BOSS HP</span>
+          <div style={{flex:1,height:10,background:"#1e293b",borderRadius:5,overflow:"hidden"}}><div style={{width:`${(bossHP/200)*100}%`,height:"100%",background:"linear-gradient(90deg,#ef4444,#f97316)",transition:"width 0.5s"}} /></div>
+          <span style={{fontSize:10,color:"#94a3b8",minWidth:52}}>{bossHP}/200</span>
+        </div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18}}>
+        <span style={{fontSize:10,color:"#10b981",minWidth:50}}>🧙 YOU</span>
+        <div style={{flex:1,height:8,background:"#1e293b",borderRadius:4,overflow:"hidden"}}><div style={{width:`${(playerHP/150)*100}%`,height:"100%",background:"#10b981",transition:"width 0.5s"}} /></div>
+        <span style={{fontSize:10,color:"#94a3b8",minWidth:52}}>{playerHP}/150</span>
+      </div>
+      <div style={{background:"#1e293b",border:"1px solid #334155",borderRadius:14,padding:18,marginBottom:18,textAlign:"center"}}>
+        <div style={{fontSize:11,color:"#64748b",marginBottom:6}}>QUESTION {qi+1}/{QUIZ_QUESTIONS.length} • +{q.xp} XP</div>
+        <div style={{fontSize:16,fontWeight:700,color:"#f1f5f9"}}>{q.q}</div>
+      </div>
+      {feedback && <div style={{textAlign:"center",padding:10,marginBottom:12,borderRadius:10,background:feedback.correct?"#064e3b":"#7f1d1d",color:feedback.correct?"#10b981":"#ef4444",fontWeight:700,fontSize:13}}>{feedback.correct?`⚔️ Hit! -${feedback.dmg} Boss HP`:`🔥 Boss attacks! -${feedback.bDmg} HP`}</div>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        {q.choices.map((c,i)=>(
+          <button key={i} onClick={()=>answer(c)}
+            style={{background:"#1e293b",border:"2px solid #334155",borderRadius:12,color:"#f1f5f9",padding:"13px",fontSize:14,fontWeight:600,transition:"all 0.2s"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="#ef4444";e.currentTarget.style.background="#2d1a1a"}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="#334155";e.currentTarget.style.background="#1e293b"}}
+          >{c}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────────────────
+
+function EduQuest() {
+  const [screen,       setScreen]       = useState("hub");
+  const [activeModule, setActiveModule] = useState(null);
+  const [xp,           setXP]           = useState(340);
+  const [level,        setLevel]        = useState(3);
+  const [streak]                        = useState(7);
+  const [coins,        setCoins]        = useState(1250);
+  const [toast,        setToast]        = useState({msg:"",show:false});
+  const [seasonXP,     setSeasonXP]     = useState(45);
+
+  const pets = [
+    {name:"Sparky",emoji:"🦊",hunger:70,mood:"😊"},
+    {name:"Nova",  emoji:"🐉",hunger:45,mood:"😴"},
+  ];
+  const achievements = [
+    {icon:"🔥",label:"7-Day Streak",  unlocked:true},
+    {icon:"⚡",label:"Math Wizard",   unlocked:true},
+    {icon:"🃏",label:"Card Master",   unlocked:false},
+    {icon:"🌍",label:"World Builder", unlocked:false},
+  ];
+
+  const showToast = useCallback((msg)=>{
+    setToast({msg,show:true});
+    setTimeout(()=>setToast(t=>({...t,show:false})),2500);
+  },[]);
+
+  const gainXP = useCallback((amount)=>{
+    setXP(x=>{
+      const newXP    = x + amount;
+      const xpNeeded = level * 200;
+      if (newXP >= xpNeeded) {
+        setLevel(l=>l+1);
+        setCoins(c=>c+200);
+        showToast(`🎉 Level Up! You're now Level ${level+1}!`);
+      }
+      return newXP % (level*200);
+    });
+    setCoins(c=>c+Math.floor(amount/5));
+    setSeasonXP(s=>Math.min(100,s+Math.floor(amount/10)));
+    showToast(`+${amount} XP earned! 🌟`);
+  },[level,showToast]);
+
+  const openModule = (key)=>{ setActiveModule(key); setScreen("module"); };
+  const closeModule = ()=>{ setScreen("hub"); setActiveModule(null); };
+
+  const renderModule = ()=>{
+    const props = {onXP:gainXP, onClose:closeModule};
+    if (activeModule==="math")  return <MathArena  {...props} />;
+    if (activeModule==="flash") return <CardBattle {...props} />;
+    if (activeModule==="notes") return <WorldBuild {...props} />;
+    if (activeModule==="quiz")  return <BossFight  {...props} />;
+  };
+
+  const subj = SUBJECTS[activeModule];
+
+  return (
+    <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#020817 0%,#0f172a 50%,#1a0a2e 100%)"}}>
+      {/* Glow overlays */}
+      <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0,background:"radial-gradient(ellipse at 20% 20%,rgba(139,92,246,0.07) 0%,transparent 50%),radial-gradient(ellipse at 80% 80%,rgba(245,158,11,0.05) 0%,transparent 50%)"}} />
+
+      <Toast msg={toast.msg} show={toast.show} />
+
+      {/* HEADER */}
+      <div style={{position:"sticky",top:0,zIndex:50,background:"rgba(2,8,23,0.88)",backdropFilter:"blur(16px)",borderBottom:"1px solid #1e293b",padding:"11px 18px"}}>
+        <div style={{maxWidth:680,margin:"0 auto"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              {screen==="module" && (
+                <button onClick={closeModule} style={{background:"none",border:"none",color:"#64748b",fontSize:20,padding:"0 6px 0 0",cursor:"pointer"}}>←</button>
+              )}
+              <span style={{fontSize:20,fontWeight:900,letterSpacing:-0.5}}>
+                <span style={{color:"#f59e0b"}}>EDU</span><span style={{color:"#f1f5f9"}}>QUEST</span>
+              </span>
+            </div>
+            <div style={{display:"flex",gap:14,alignItems:"center"}}>
+              <span style={{fontSize:13,color:"#f59e0b",fontWeight:700}}>🔥 {streak}</span>
+              <span style={{fontSize:13,color:"#fbbf24",fontWeight:700}}>🪙 {coins.toLocaleString()}</span>
+            </div>
+          </div>
+          <XPBar xp={xp} level={level} />
+        </div>
+      </div>
+
+      {/* CONTENT */}
+      <div style={{maxWidth:680,margin:"0 auto",padding:"18px 14px",position:"relative",zIndex:1}}>
+
+        {screen==="hub" ? (
+          <div>
+            {/* Season banner */}
+            <div style={{background:"linear-gradient(135deg,#1a0a2e,#0f172a)",border:"1px solid #8b5cf6",borderRadius:18,padding:18,marginBottom:18,boxShadow:"0 0 36px rgba(139,92,246,0.1)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <div>
+                  <div style={{fontSize:10,color:"#8b5cf6",fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Current Season</div>
+                  <div style={{fontSize:14,fontWeight:800,color:"#f1f5f9"}}>Season 1: Secrets of the Solar System</div>
+                </div>
+                <div style={{fontSize:30}}>🚀</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{flex:1,height:8,background:"#1e293b",borderRadius:4,overflow:"hidden"}}>
+                  <div style={{width:`${seasonXP}%`,height:"100%",background:"linear-gradient(90deg,#8b5cf6,#ec4899)",transition:"width 0.6s"}} />
+                </div>
+                <span style={{fontSize:11,color:"#64748b",minWidth:40}}>Tier {Math.floor(seasonXP/10)}</span>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div style={{background:"#0f172a",border:"1px solid #1e293b",borderRadius:14,padding:"14px 20px",marginBottom:18,display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
+              {[["⚡",xp,"XP"],["🔥",streak,"Streak"],["🪙",coins.toLocaleString(),"Coins"],["⭐",`Lv${level}`,"Rank"]].map(([icon,val,lbl])=>(
+                <div key={lbl} style={{textAlign:"center"}}>
+                  <div style={{fontSize:18}}>{icon}</div>
+                  <div style={{fontSize:15,fontWeight:800,color:"#f1f5f9"}}>{val}</div>
+                  <div style={{fontSize:9,color:"#64748b",textTransform:"uppercase",letterSpacing:1}}>{lbl}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Modules */}
+            <div style={{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Today's Quests</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
+              {Object.entries(SUBJECTS).map(([key,s])=>(
+                <button key={key} onClick={()=>openModule(key)}
+                  style={{background:`linear-gradient(135deg,${s.bg},#0f172a)`,border:`1px solid ${s.color}44`,borderRadius:16,padding:18,cursor:"pointer",textAlign:"left",transition:"all 0.25s",boxShadow:`0 4px 16px ${s.color}11`}}
+                  onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow=`0 12px 28px ${s.color}33`;e.currentTarget.style.borderColor=`${s.color}88`}}
+                  onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=`0 4px 16px ${s.color}11`;e.currentTarget.style.borderColor=`${s.color}44`}}
+                >
+                  <div style={{fontSize:28,marginBottom:8}}>{s.icon}</div>
+                  <div style={{fontSize:14,fontWeight:800,color:"#f1f5f9",marginBottom:4}}>{s.label}</div>
+                  <div style={{fontSize:11,color:s.color,fontWeight:600}}>
+                    {key==="math"&&"Speed math • Earn combos"}
+                    {key==="flash"&&"TCG battle • Card study"}
+                    {key==="notes"&&"Mine facts • Build world"}
+                    {key==="quiz"&&"Boss battle • Final exam"}
+                  </div>
+                  <div style={{marginTop:10,display:"flex",gap:6,alignItems:"center"}}>
+                    <div style={{flex:1,height:4,background:"#1e293b",borderRadius:2}}><div style={{width:"45%",height:"100%",background:s.color,borderRadius:2}} /></div>
+                    <span style={{fontSize:10,color:"#64748b"}}>+{key==="math"?50:key==="flash"?80:key==="notes"?60:100} XP</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Pets */}
+            <div style={{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>My Companions</div>
+            <div style={{display:"flex",gap:10,marginBottom:20}}>
+              {pets.map((pet,i)=>(
+                <div key={i} style={{flex:1,background:"#0f172a",border:"1px solid #1e293b",borderRadius:14,padding:14,textAlign:"center"}}>
+                  <div style={{fontSize:28,marginBottom:6}}>{pet.emoji}</div>
+                  <div style={{fontSize:12,fontWeight:700,color:"#f1f5f9",marginBottom:4}}>{pet.name}</div>
+                  <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>Hunger {pet.mood}</div>
+                  <div style={{height:5,background:"#1e293b",borderRadius:3,overflow:"hidden"}}><div style={{width:`${pet.hunger}%`,height:"100%",background:"#10b981"}} /></div>
+                </div>
+              ))}
+            </div>
+
+            {/* Achievements */}
+            <div style={{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Achievements</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
+              {achievements.map((a,i)=>(
+                <div key={i} style={{background:a.unlocked?"#1e293b":"#0f172a",border:`1px solid ${a.unlocked?"#334155":"#1e293b"}`,borderRadius:12,padding:"11px 14px",display:"flex",alignItems:"center",gap:10,opacity:a.unlocked?1:0.4}}>
+                  <span style={{fontSize:20}}>{a.unlocked?a.icon:"🔒"}</span>
+                  <span style={{fontSize:12,fontWeight:600,color:a.unlocked?"#f1f5f9":"#64748b"}}>{a.label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{textAlign:"center",fontSize:10,color:"#334155",paddingBottom:16}}>EduQuest • Ethical Gamification • COPPA Compliant • No Ads</div>
+          </div>
+        ) : (
+          <div style={{background:"#0f172a",border:`1px solid ${subj?.color}44`,borderRadius:18,padding:22,boxShadow:`0 0 36px ${subj?.color}11`}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22,paddingBottom:18,borderBottom:"1px solid #1e293b"}}>
+              <div style={{fontSize:26}}>{subj?.icon}</div>
+              <div>
+                <div style={{fontSize:17,fontWeight:800,color:"#f1f5f9"}}>{subj?.label}</div>
+                <div style={{fontSize:11,color:subj?.color}}>
+                  {activeModule==="math"&&"Answer fast • Build combos • Earn XP"}
+                  {activeModule==="flash"&&"Study your cards • Battle AI • Level up"}
+                  {activeModule==="notes"&&"Read • Mine facts • Build your world"}
+                  {activeModule==="quiz"&&"Defeat the boss • Answer correctly • Win!"}
+                </div>
+              </div>
+            </div>
+            {renderModule()}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<EduQuest />);
+</script>
+</body>
+</html>
